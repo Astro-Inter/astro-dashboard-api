@@ -5,16 +5,23 @@ import { allowedOrigins, type Bindings } from './env';
 import { ApiError } from './errors';
 import { verifyFirebaseToken } from './auth/firebase';
 import { resolveWorkspace, type WorkspaceContext } from './auth/workspace';
+import { DatabricksClient, settingsFor, type QueryExecutor } from './databricks';
+import { parseFilters } from './dashboard/filters';
+import { loadDashboard } from './dashboard/service';
 
 type WorkerEnv = { Bindings: Bindings; Variables: { requestId: string; workspace: WorkspaceContext } };
 
 export interface Dependencies {
   verifyIdentity: typeof verifyFirebaseToken;
   resolveAccess: typeof resolveWorkspace;
+  createExecutor: (env: Bindings) => QueryExecutor;
 }
 
 export function createApp(overrides: Partial<Dependencies> = {}) {
-  const dependencies = { verifyIdentity: verifyFirebaseToken, resolveAccess: resolveWorkspace, ...overrides };
+  const dependencies: Dependencies = {
+    verifyIdentity: verifyFirebaseToken, resolveAccess: resolveWorkspace,
+    createExecutor: (env) => new DatabricksClient(settingsFor(env)), ...overrides,
+  };
   const app = new Hono<WorkerEnv>();
   app.use('*', async (c, next) => {
     c.set('requestId', crypto.randomUUID());
@@ -41,6 +48,11 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
   app.get('/api/me', (c) => {
     const { userId, workspaceId, role } = c.get('workspace');
     return c.json({ userId, workspaceId, role });
+  });
+  app.get('/api/dashboard', async (c) => {
+    const filters = parseFilters(new URL(c.req.url).searchParams);
+    const config = settingsFor(c.env);
+    return c.json(await loadDashboard(filters, c.get('workspace'), config, dependencies.createExecutor(c.env)));
   });
   app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Rota não encontrada.', requestId: c.get('requestId') } }, 404));
   app.onError((error, c) => {
