@@ -8,6 +8,7 @@ import { resolveWorkspace, type WorkspaceContext } from './auth/workspace';
 import { DatabricksClient, settingsFor, type QueryExecutor } from './databricks';
 import { parseFilters } from './dashboard/filters';
 import { loadDashboard } from './dashboard/service';
+import { openapi } from './openapi';
 
 type WorkerEnv = { Bindings: Bindings; Variables: { requestId: string; workspace: WorkspaceContext } };
 
@@ -39,6 +40,7 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
     credentials: false,
   }));
   app.get('/health', (c) => c.json({ status: 'ok', service: 'astro-dashboard-api', version: '0.1.0' }));
+  app.get('/openapi.json', (c) => c.json(openapi));
   app.use('/api/*', async (c, next) => {
     const identity = await dependencies.verifyIdentity(c.req.header('Authorization'), c.env.FIREBASE_PROJECT_ID);
     const workspace = await dependencies.resolveAccess(identity.uid, c.env.ASTRO_DB);
