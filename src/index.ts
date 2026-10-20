@@ -3,10 +3,18 @@ import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
 import { allowedOrigins, type Bindings } from './env';
 import { ApiError } from './errors';
+import { verifyFirebaseToken } from './auth/firebase';
+import { resolveWorkspace, type WorkspaceContext } from './auth/workspace';
 
-type WorkerEnv = { Bindings: Bindings; Variables: { requestId: string } };
+type WorkerEnv = { Bindings: Bindings; Variables: { requestId: string; workspace: WorkspaceContext } };
 
-export function createApp() {
+export interface Dependencies {
+  verifyIdentity: typeof verifyFirebaseToken;
+  resolveAccess: typeof resolveWorkspace;
+}
+
+export function createApp(overrides: Partial<Dependencies> = {}) {
+  const dependencies = { verifyIdentity: verifyFirebaseToken, resolveAccess: resolveWorkspace, ...overrides };
   const app = new Hono<WorkerEnv>();
   app.use('*', async (c, next) => {
     c.set('requestId', crypto.randomUUID());
@@ -24,6 +32,16 @@ export function createApp() {
     credentials: false,
   }));
   app.get('/health', (c) => c.json({ status: 'ok', service: 'astro-dashboard-api', version: '0.1.0' }));
+  app.use('/api/*', async (c, next) => {
+    const identity = await dependencies.verifyIdentity(c.req.header('Authorization'), c.env.FIREBASE_PROJECT_ID);
+    const workspace = await dependencies.resolveAccess(identity.uid, c.env.ASTRO_DB);
+    c.set('workspace', workspace);
+    await next();
+  });
+  app.get('/api/me', (c) => {
+    const { userId, workspaceId, role } = c.get('workspace');
+    return c.json({ userId, workspaceId, role });
+  });
   app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Rota não encontrada.', requestId: c.get('requestId') } }, 404));
   app.onError((error, c) => {
     const safe = error instanceof ApiError ? error : new ApiError(503, 'service_unavailable', 'Serviço indisponível.');
