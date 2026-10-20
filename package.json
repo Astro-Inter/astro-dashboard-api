@@ -1,0 +1,30 @@
+{
+  "name": "astro-dashboard-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API de dashboards Astro por workspace para Cloudflare Workers",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.13",
+    "jose": "^6.2.13",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.6",
+    "@cloudflare/workers-types": "^5.20261019.1",
+    "@types/pg": "^8.15.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.3"
+  }
+}

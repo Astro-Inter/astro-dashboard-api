@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "astro-dashboard-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "CORS_ALLOWED_ORIGINS": "https://astro-inter.github.io",
+    "FIREBASE_PROJECT_ID": "",
+    "DATABRICKS_HOST": "",
+    "DATABRICKS_WAREHOUSE_ID": "",
+    "DATABRICKS_CATALOG": "workspace",
+    "DATABRICKS_SCHEMA": "astro"
+  },
+  "hyperdrive": [{
+    "binding": "ASTRO_DB",
+    // Substituir pelo ID real de uma configuração Hyperdrive SEM query cache.
+    "id": "00000000000000000000000000000000",
+    "localConnectionString": "postgres://astro:local-only@127.0.0.1:5432/astro"
+  }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
+}

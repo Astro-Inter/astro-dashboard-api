@@ -1,0 +1,9 @@
+# Copie para .dev.vars (ignorado pelo Git). Nenhum PAT é utilizado.
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173
+FIREBASE_PROJECT_ID=seu-projeto-firebase
+DATABRICKS_HOST=https://seu-workspace.cloud.databricks.com
+DATABRICKS_WAREHOUSE_ID=seu-warehouse-id
+DATABRICKS_CLIENT_ID=seu-service-principal-client-id
+DATABRICKS_CLIENT_SECRET=seu-oauth-secret
+DATABRICKS_CATALOG=workspace
+DATABRICKS_SCHEMA=astro
