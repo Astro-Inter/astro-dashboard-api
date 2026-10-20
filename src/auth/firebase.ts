@@ -1,14 +1,12 @@
-import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { createRemoteJWKSet, errors, jwksCache, jwtVerify, type JWTVerifyGetKey, type JWKSCacheInput } from 'jose';
 import { ApiError } from '../errors';
 
-const googleKeys = createRemoteJWKSet(new URL(
-  'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',
-), { timeoutDuration: 5_000, cacheMaxAge: 3_600_000 });
+const googleKeyCache: JWKSCacheInput = {};
 
 export interface Identity { uid: string }
 
 export async function verifyFirebaseToken(
-  authorization: string | undefined, projectId: string | undefined, keys: JWTVerifyGetKey = googleKeys,
+  authorization: string | undefined, projectId: string | undefined, keys?: JWTVerifyGetKey,
 ): Promise<Identity> {
   const match = authorization?.match(/^Bearer ([^\s]+)$/i);
   if (!match?.[1] || match[1].length > 8192) {
@@ -18,7 +16,11 @@ export async function verifyFirebaseToken(
     throw new ApiError(503, 'firebase_not_configured', 'Autenticação indisponível.');
   }
   try {
-    const { payload } = await jwtVerify(match[1], keys, {
+    // Cacheia apenas as chaves resolvidas; cada requisição mantém seu próprio I/O.
+    const resolver = keys ?? createRemoteJWKSet(new URL(
+      'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',
+    ), { timeoutDuration: 5_000, cacheMaxAge: 3_600_000, [jwksCache]: googleKeyCache });
+    const { payload } = await jwtVerify(match[1], resolver, {
       issuer: `https://securetoken.google.com/${projectId}`,
       audience: projectId,
       algorithms: ['RS256'],

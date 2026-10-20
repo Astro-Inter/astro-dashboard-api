@@ -32,6 +32,7 @@ JOIN public.unidade own_unit ON own_unit.id_unidade = usr.unidade_id
 JOIN public.workspace workspace ON workspace.id_workspace = own_unit.workspace_id
 WHERE usr.firebase_uid = $1 AND usr.status = 'ATIVO'
   AND usr.tipo IN ('GESTOR', 'GESTOR_WORKSPACE')
+  AND public.fn_retornar_nivel_acesso($1) = usr.tipo
   AND (own_unit.ativo IS TRUE OR usr.tipo = 'GESTOR_WORKSPACE')
 LIMIT 2`;
 
