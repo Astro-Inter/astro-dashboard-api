@@ -21,16 +21,16 @@ export function buildQueries(config: DatabricksSettings) {
       AND lower(gestor.status) = 'ativo'
       AND CAST(t.data_inicial AS DATE) BETWEEN :start_date AND :end_date
   ), scoped_participations AS (
-    SELECT DISTINCT tf.id_turma_funcionario, tf.turma_id, tf.usuario_id
-    FROM ${table('turma_funcionario')} tf
+    SELECT DISTINCT tf.id_turma_colaborador, tf.turma_id, tf.usuario_id
+    FROM ${table('turma_colaborador')} tf
     JOIN scoped_classes sc ON sc.id_turma = tf.turma_id
     JOIN ${table('usuario')} participante ON participante.id_usuario = tf.usuario_id
     JOIN authorized_units participant_scope ON participant_scope.id_unidade = participante.unidade_id
     WHERE lower(participante.tipo) = 'colaborador' AND lower(participante.status) = 'ativo'
   ), completed_participations AS (
-    SELECT DISTINCT sp.id_turma_funcionario
+    SELECT DISTINCT sp.id_turma_colaborador
     FROM scoped_participations sp
-    JOIN ${table('conclusao_evento')} ce ON ce.turma_funcionario_id = sp.id_turma_funcionario
+    JOIN ${table('conclusao_evento')} ce ON ce.turma_colaborador_id = sp.id_turma_colaborador
     WHERE lower(ce.status) = 'concluido'
   )`;
 
@@ -61,17 +61,17 @@ export function buildQueries(config: DatabricksSettings) {
       GROUP BY 1 ORDER BY 1`,
     eventsSummary: `${classes}
       SELECT COUNT(DISTINCT sc.id_turma) AS turmas, COUNT(DISTINCT sp.usuario_id) AS participantes,
-             COUNT(DISTINCT cp.id_turma_funcionario) AS participacoes_concluidas
+             COUNT(DISTINCT cp.id_turma_colaborador) AS participacoes_concluidas
       FROM scoped_classes sc
       LEFT JOIN scoped_participations sp ON sp.turma_id = sc.id_turma
-      LEFT JOIN completed_participations cp ON cp.id_turma_funcionario = sp.id_turma_funcionario`,
+      LEFT JOIN completed_participations cp ON cp.id_turma_colaborador = sp.id_turma_colaborador`,
     eventsTimeline: `${classes}
       SELECT CAST(date_trunc(:granularity, sc.data_inicial) AS DATE) AS data,
              CAST(sc.nr_id AS STRING) AS nr_id, COUNT(DISTINCT sc.id_turma) AS turmas,
-             COUNT(DISTINCT cp.id_turma_funcionario) AS participacoes_concluidas
+             COUNT(DISTINCT cp.id_turma_colaborador) AS participacoes_concluidas
       FROM scoped_classes sc
       LEFT JOIN scoped_participations sp ON sp.turma_id = sc.id_turma
-      LEFT JOIN completed_participations cp ON cp.id_turma_funcionario = sp.id_turma_funcionario
+      LEFT JOIN completed_participations cp ON cp.id_turma_colaborador = sp.id_turma_colaborador
       GROUP BY 1, 2 ORDER BY 1, 2`,
     eventsDistribution: `${scope}
       SELECT CAST(e.nr_id AS STRING) AS nr_id, e.modo_conclusao,
