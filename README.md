@@ -39,14 +39,13 @@ npm ci --ignore-scripts
 Copy-Item .dev.vars.example .dev.vars
 ```
 
-Preencha `.dev.vars` com os valores do seu ambiente. Esse arquivo é ignorado pelo Git. Para o PostgreSQL local, defina a conexão antes de iniciar:
+Preencha `.dev.vars` com os valores do seu ambiente. Esse arquivo é ignorado pelo Git. A variável `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_ASTRO_DB` também fica nesse arquivo; o comando abaixo a carrega automaticamente para o Hyperdrive local:
 
 ```powershell
-$env:CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_ASTRO_DB = "postgres://usuario:senha@host:5432/banco?sslmode=require"
 npm run dev
 ```
 
-Use uma conexão de desenvolvimento com acesso somente de leitura. A senha deve ser codificada para URL quando tiver caracteres especiais. O exemplo em `wrangler.jsonc` é um endereço fictício local e precisa ser substituído ou sobrescrito pela variável acima.
+Use uma conexão de desenvolvimento com acesso somente de leitura. A senha deve ser codificada para URL quando tiver caracteres especiais. O exemplo em `wrangler.jsonc` é um endereço fictício local e é sobrescrito pela variável acima. Uma variável já definida no terminal tem precedência sobre `.dev.vars`. Reinicie o servidor depois de alterar a conexão local do PostgreSQL. Esse carregamento é exclusivo do desenvolvimento; em produção, configure o recurso Hyperdrive na conta Cloudflare.
 
 - API local: `http://localhost:8787`
 - Saúde do processo: `http://localhost:8787/health`

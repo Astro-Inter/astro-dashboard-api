@@ -1,6 +1,8 @@
 # Copie para .dev.vars (ignorado pelo Git). Nenhum PAT é utilizado.
 CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:4173
 FIREBASE_PROJECT_ID=seu-projeto-firebase
+# Lida pelo npm run dev para configurar o Hyperdrive local. Use TLS no banco remoto.
+CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_ASTRO_DB="postgres://usuario:senha@host:5432/banco?sslmode=require"
 DATABRICKS_HOST=https://seu-workspace.cloud.databricks.com
 DATABRICKS_WAREHOUSE_ID=seu-warehouse-id
 DATABRICKS_CLIENT_ID=seu-service-principal-client-id

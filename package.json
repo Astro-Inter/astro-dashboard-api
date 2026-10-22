@@ -6,7 +6,7 @@
   "description": "API de dashboards Astro por workspace para Cloudflare Workers",
   "engines": { "node": ">=22" },
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "node scripts/dev.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
