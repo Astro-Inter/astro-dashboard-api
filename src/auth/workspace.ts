@@ -23,10 +23,10 @@ export const membershipSql = `
 SELECT usr.id_usuario::text AS user_id, own_unit.workspace_id::text AS workspace_id,
        usr.tipo AS role, clock_timestamp() AS authorization_checked_at,
        COALESCE((
-         SELECT array_agg(scope_unit.id_unidade::text ORDER BY scope_unit.id_unidade)
+         SELECT json_agg(scope_unit.id_unidade::text ORDER BY scope_unit.id_unidade)
          FROM public.unidade scope_unit
          WHERE scope_unit.workspace_id = own_unit.workspace_id AND scope_unit.ativo IS TRUE
-       ), ARRAY[]::text[]) AS unit_ids
+       ), '[]'::json) AS unit_ids
 FROM public.usuario usr
 JOIN public.unidade own_unit ON own_unit.id_unidade = usr.unidade_id
 JOIN public.workspace workspace ON workspace.id_workspace = own_unit.workspace_id
