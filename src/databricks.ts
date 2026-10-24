@@ -28,19 +28,21 @@ export class OAuthProvider {
   }
 
   private async acquire(key: string): Promise<string> {
+    let failureCode = 'oauth_transport_error';
     try {
       const credentials = new TextEncoder().encode(
         `${this.settings.DATABRICKS_CLIENT_ID}:${this.settings.DATABRICKS_CLIENT_SECRET}`,
       );
       const response = await this.transport(`${this.settings.DATABRICKS_HOST.replace(/\/$/, '')}/oidc/v1/token`, {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8_000),
+        method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8_000),
         headers: {
           Authorization: `Basic ${btoa(String.fromCharCode(...credentials))}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: new URLSearchParams({ grant_type: 'client_credentials', scope: 'all-apis' }),
       });
-      if (!response.ok) throw new Error('OAuth refused');
+      if (!response.ok) { failureCode = `oauth_http_${response.status}`; throw new Error('OAuth refused'); }
+      failureCode = 'oauth_response_invalid';
       const payload = z.object({
         access_token: z.string().min(1), token_type: z.string().optional(),
         expires_in: z.number().positive().max(86_400),
@@ -52,6 +54,7 @@ export class OAuthProvider {
       this.cache.set(key, { value: payload.access_token, expiresAt: Date.now() + payload.expires_in * 1000 });
       return payload.access_token;
     } catch {
+      console.warn(JSON.stringify({ code: failureCode }));
       throw new ApiError(503, 'databricks_authentication_failed', 'Autenticação da fonte de dados indisponível.');
     }
   }
@@ -95,7 +98,7 @@ export class DatabricksClient implements QueryExecutor {
     try {
       const token = await this.oauth.token();
       const response = await this.transport(`${this.settings.DATABRICKS_HOST.replace(/\/$/, '')}${path}`, {
-        ...init, redirect: 'error', signal: AbortSignal.timeout(Math.max(1, Math.min(8_000, deadline - Date.now()))),
+        ...init, redirect: 'manual', signal: AbortSignal.timeout(Math.max(1, Math.min(8_000, deadline - Date.now()))),
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!response.ok) {
@@ -143,7 +146,11 @@ export class DatabricksClient implements QueryExecutor {
           return rows.map((row) => Object.fromEntries(columns.map((name, index) => [name, row[index] ?? null])));
         }
         if (!['PENDING', 'RUNNING'].includes(state) || !statementId) {
+          const failure = (payload as { status?: { error?: { error_code?: string; message?: string } } }).status?.error;
+          const permissionDenied = failure?.message?.includes('[INSUFFICIENT_PERMISSIONS]');
+          console.warn(JSON.stringify({ code: 'databricks_sql_failed', upstreamCode: failure?.error_code, permissionDenied: !!permissionDenied }));
           finished = true;
+          if (permissionDenied) throw new ApiError(503, 'databricks_permission_missing', 'A identidade da API ainda não tem permissão para consultar uma tabela desta visão. Solicite a liberação ao administrador.');
           throw new ApiError(502, 'query_failed', 'Não foi possível executar a consulta do dashboard.');
         }
         if (Date.now() + this.pollMs >= deadline) throw new ApiError(504, 'query_timeout', 'A consulta excedeu o tempo permitido.');
