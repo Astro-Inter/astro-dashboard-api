@@ -30,7 +30,17 @@ describe('OAuth M2M', () => {
     const init = transport.mock.calls[0]?.[1];
     expect(String(init?.body)).toContain('grant_type=client_credentials');
     expect(new Headers(init?.headers).get('Authorization')).toMatch(/^Basic /);
-    expect(init?.redirect).toBe('error');
+    expect(init?.redirect).toBe('manual');
+  });
+  it.each([301, 302, 303, 307, 308])('rejeita redirecionamento OAuth %s sem reenviar credenciais', async (status) => {
+    const transport = vi.fn<Transport>(async () => new Response(null, {
+      status, headers: { Location: 'https://untrusted.test/capture' },
+    }));
+    const provider = new OAuthProvider(settings, transport, new Map());
+    await expect(provider.token()).rejects.toMatchObject({ status: 503, code: 'databricks_authentication_failed' });
+    expect(transport).toHaveBeenCalledOnce();
+    expect(transport.mock.calls[0]?.[0]).toBe(`${settings.DATABRICKS_HOST}/oidc/v1/token`);
+    expect(transport.mock.calls[0]?.[1]?.redirect).toBe('manual');
   });
   it('não expõe a resposta de autenticação em caso de falha', async () => {
     const provider = new OAuthProvider(settings, async () => new Response('private secret', { status: 401 }), new Map());
@@ -44,6 +54,16 @@ describe('OAuth M2M', () => {
 });
 
 describe('Statement Execution API', () => {
+  it.each([301, 302, 303, 307, 308])('rejeita redirecionamento SQL %s sem reenviar o token', async (status) => {
+    const { client, transport } = setup(async () => new Response(null, {
+      status, headers: { Location: 'https://untrusted.test/capture' },
+    }));
+    await expect(client.execute('SELECT 12', [])).rejects.toMatchObject({ status: 503, code: 'databricks_unavailable' });
+    expect(transport.mock.calls.map(([url]) => url)).toEqual([
+      `${settings.DATABRICKS_HOST}/oidc/v1/token`, `${settings.DATABRICKS_HOST}/api/2.0/sql/statements`,
+    ]);
+    expect(transport.mock.calls[1]?.[1]?.redirect).toBe('manual');
+  });
   it('envia parâmetros preparados e devolve apenas registros do resultado', async () => {
     const { client, transport } = setup(async () => Response.json(success()));
     expect(await client.execute('SELECT :value AS total', [{ name: 'value', value: '12', type: 'STRING' }]))
