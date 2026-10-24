@@ -1,5 +1,7 @@
 # Astro Dashboard API
 
+O editor por campos e o cache de consultas estão descritos em [Catálogo e cache](docs/catalogo-e-cache.md).
+
 API de leitura em TypeScript e Hono, preparada para **Cloudflare Workers**, que entrega indicadores e séries do Databricks para o frontend Astro desenhar os gráficos.
 
 ## Como funciona
@@ -54,6 +56,8 @@ Use uma conexão de desenvolvimento com acesso somente de leitura. A senha deve 
 O `health` não consulta dependências. Um `200` nele não confirma acesso ao PostgreSQL ou Databricks. As rotas protegidas precisam de um ID token Firebase válido; não há autenticação por usuário de demonstração.
 
 ## Endpoints
+
+As configurações das visões pessoais ficam no `localStorage` do Astro Web, conforme o [guia de dashboards editáveis](docs/editable-dashboards.md). A API não armazena essas configurações nem exige uma tabela adicional; o PostgreSQL continua sendo usado para resolver o acesso ao workspace.
 
 | Método | Rota | Autenticação | Resultado |
 | --- | --- | --- | --- |
