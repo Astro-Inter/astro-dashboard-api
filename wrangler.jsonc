@@ -8,16 +8,16 @@
   "preview_urls": false,
   "vars": {
     "CORS_ALLOWED_ORIGINS": "https://astro-inter.github.io",
-    "FIREBASE_PROJECT_ID": "",
-    "DATABRICKS_HOST": "",
-    "DATABRICKS_WAREHOUSE_ID": "",
+    "FIREBASE_PROJECT_ID": "astro-ba278",
+    "DATABRICKS_HOST": "https://dbc-120abf1e-f271.cloud.databricks.com",
+    "DATABRICKS_WAREHOUSE_ID": "8e334d94d221b585",
     "DATABRICKS_CATALOG": "workspace",
     "DATABRICKS_SCHEMA": "astro"
   },
   "hyperdrive": [{
     "binding": "ASTRO_DB",
-    // Substituir pelo ID real de uma configuração Hyperdrive SEM query cache.
-    "id": "00000000000000000000000000000000",
+    // Reutiliza o Hyperdrive já publicado; não provisiona outro conector.
+    "id": "2004ed1dbe4a460495e663c42f3b801f",
     "localConnectionString": "postgres://astro:local-only@127.0.0.1:5432/astro"
   }],
   "observability": { "enabled": true, "head_sampling_rate": 0.1 }
