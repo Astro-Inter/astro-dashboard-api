@@ -1,3 +1,4 @@
+import { diagnostic } from "./diagnostics";
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { secureHeaders } from 'hono/secure-headers';
@@ -20,13 +21,13 @@ type WorkerEnv = { Bindings: Bindings; Variables: { requestId: string; workspace
 export interface Dependencies {
   verifyIdentity: typeof verifyFirebaseToken;
   resolveAccess: typeof resolveWorkspace;
-  createExecutor: (env: Bindings) => QueryExecutor;
+  createExecutor: (env: Bindings, context?: { request_id: string }) => QueryExecutor;
 }
 
 export function createApp(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
     verifyIdentity: verifyFirebaseToken, resolveAccess: resolveWorkspace,
-    createExecutor: (env) => new DatabricksClient(settingsFor(env)), ...overrides,
+    createExecutor: (env, context) => new DatabricksClient(settingsFor(env), undefined, undefined, undefined, undefined, context), ...overrides,
   };
   const app = new Hono<WorkerEnv>();
   const dashboardCache = new DashboardCache();
@@ -34,7 +35,13 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
     c.set('requestId', crypto.randomUUID());
     c.header('X-Request-Id', c.get('requestId'));
     c.header('Cache-Control', 'no-store');
-    await next();
+    const started = Date.now();
+    try { await next(); }
+    finally {
+        const fields = { event: 'http_request_finished', request_id: c.get('requestId'),
+          method: c.req.method, route: c.req.routePath ?? 'unmatched', status: c.res.status, duration_ms: Date.now() - started };
+        console[c.res.status >= 500 ? 'error' : c.res.status >= 400 ? 'warn' : 'log'](JSON.stringify(fields));
+    }
   });
   app.use('*', secureHeaders());
   app.use('/api/*', cors({
@@ -62,7 +69,7 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
     const filters = parseFilters(new URL(c.req.url).searchParams);
     const config = settingsFor(c.env);
     const workspace = c.get('workspace');
-    return c.json(await dashboardCache.load(workspace, config, { mode: 'dashboard', filters }, c.req.header('X-Dashboard-Refresh') === '1', () => loadDashboard(filters, workspace, config, dependencies.createExecutor(c.env))));
+    return c.json(await dashboardCache.load(workspace, config, { mode: 'dashboard', filters }, c.req.header('X-Dashboard-Refresh') === '1', () => loadDashboard(filters, workspace, config, dependencies.createExecutor(c.env, { request_id: c.get("requestId") }))));
   });
   app.get('/api/dashboard-catalog', (c) => c.json({ items: chartCatalog }));
   app.get('/api/explorer/catalog', (c) => c.json(publicExplorerCatalog(settingsFor(c.env))));
@@ -71,7 +78,7 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
     if (!parsed.success) throw new ApiError(422, 'invalid_explorer_query', 'Confira a base, os campos, os agrupamentos e os cálculos permitidos.');
     const filters = parseFilters(new URLSearchParams(parsed.data.filters));
     const config = settingsFor(c.env), workspace = c.get('workspace');
-    return c.json(await dashboardCache.load(workspace, config, { mode: 'explorer', query: parsed.data.query, filters }, c.req.header('X-Dashboard-Refresh') === '1', () => loadExplorer(parsed.data.query, filters, workspace, config, dependencies.createExecutor(c.env))));
+    return c.json(await dashboardCache.load(workspace, config, { mode: 'explorer', query: parsed.data.query, filters }, c.req.header('X-Dashboard-Refresh') === '1', () => loadExplorer(parsed.data.query, filters, workspace, config, dependencies.createExecutor(c.env, { request_id: c.get("requestId") }))));
   });
   async function jsonBody(request: { json: () => Promise<unknown> }) {
     try { return await request.json(); } catch { throw new ApiError(422, 'invalid_explorer_query', 'Informe uma configuração de cálculo válida.'); }
@@ -79,7 +86,7 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
   app.notFound((c) => c.json({ error: { code: 'not_found', message: 'Rota não encontrada.', requestId: c.get('requestId') } }, 404));
   app.onError((error, c) => {
     const safe = error instanceof ApiError ? error : new ApiError(503, 'service_unavailable', 'Serviço indisponível.');
-    console.error(JSON.stringify({ code: safe.code, requestId: c.get('requestId') }));
+    console[safe.status >= 500 ? 'error' : 'warn'](JSON.stringify({ event: 'request_failed', code: safe.code, requestId: c.get('requestId'), request_id: c.get('requestId'), method: c.req.method, route: c.req.routePath ?? 'unmatched', status: safe.status, ...diagnostic(error) }));
     return c.json({ error: { code: safe.code, message: safe.message, requestId: c.get('requestId') } }, safe.status);
   });
   return app;
