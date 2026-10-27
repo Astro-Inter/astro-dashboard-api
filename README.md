@@ -165,3 +165,7 @@ Os testes executam em workerd e usam respostas controladas para autenticação, 
 | `tests` | Testes no runtime Workers |
 
 Trabalho relacionado: [SCRUM-593](https://luizacursino.atlassian.net/browse/SCRUM-593), subtarefas SCRUM-594 a SCRUM-599. A `main` exige PR e pelo menos uma aprovação.
+
+## Diagnóstico operacional
+
+Consulte [os campos e limites dos novos diagnósticos](docs/observability-diagnostics.md) para investigar falhas por requisição ou execução no Grafana.

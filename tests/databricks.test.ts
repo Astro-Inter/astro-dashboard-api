@@ -22,6 +22,18 @@ function setup(handler: Transport) {
 }
 
 describe('OAuth M2M', () => {
+  it('associa a falha ao request sem exportar SQL, parâmetros ou mensagens do provedor', async () => {
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { transport, provider } = setup(async () => { throw new Error('private@example.com password=secret'); });
+    const client = new DatabricksClient(settings, transport, provider, 1000, 0, { request_id: 'request-diagnostic' });
+    try {
+      await expect(client.execute('SELECT private', [{ name: 'value', value: 'private-value', type: 'STRING' }])).rejects.toThrow();
+      const logs = JSON.stringify(output.mock.calls);
+      expect(logs).toContain('request-diagnostic');
+      expect(logs).toContain('databricks_query_failed');
+      expect(logs).not.toMatch(/private|password|secret|SELECT/);
+    } finally { output.mockRestore(); }
+  });
   it('obtém e reutiliza o token sem PAT', async () => {
     const { provider, transport } = setup(async () => Response.json({}));
     expect(await provider.token()).toBe('oauth-test-only');

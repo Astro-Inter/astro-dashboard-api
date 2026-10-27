@@ -1,3 +1,5 @@
+import { diagnostic, observe } from "./diagnostics";
+import type { QueryContext } from "./request-context";
 import { z } from 'zod';
 import { databricksSettings, type Bindings, type DatabricksSettings } from './env';
 import { ApiError } from './errors';
@@ -16,7 +18,8 @@ export class OAuthProvider {
   private pending: Promise<string> | undefined;
   constructor(private readonly settings: DatabricksSettings,
     private readonly transport: Transport = http,
-    private readonly cache: Map<string, Token> = tokenCache) {}
+    private readonly cache: Map<string, Token> = tokenCache,
+    private readonly context: QueryContext = {}) {}
 
   async token(): Promise<string> {
     const key = `${this.settings.DATABRICKS_HOST}|${this.settings.DATABRICKS_CLIENT_ID}`;
@@ -53,8 +56,8 @@ export class OAuthProvider {
       }
       this.cache.set(key, { value: payload.access_token, expiresAt: Date.now() + payload.expires_in * 1000 });
       return payload.access_token;
-    } catch {
-      console.warn(JSON.stringify({ code: failureCode }));
+    } catch (error) {
+      console.warn(JSON.stringify({ event: 'dependency_failed', dependency: 'databricks', stage: 'oauth', ...this.context, code: failureCode, ...diagnostic(error) }));
       throw new ApiError(503, 'databricks_authentication_failed', 'Autenticação da fonte de dados indisponível.');
     }
   }
@@ -88,8 +91,9 @@ export class DatabricksClient implements QueryExecutor {
     private readonly transport: Transport = http,
     oauth?: OAuthProvider,
     private readonly timeoutMs = 30_000,
-    private readonly pollMs = 500) {
-    this.oauth = oauth ?? new OAuthProvider(settings, transport);
+    private readonly pollMs = 500,
+    private readonly context: QueryContext = {}) {
+    this.oauth = oauth ?? new OAuthProvider(settings, transport, undefined, context);
   }
 
   private async request(path: string, init: RequestInit, deadline: number): Promise<unknown> {
@@ -116,6 +120,11 @@ export class DatabricksClient implements QueryExecutor {
     const deadline = Date.now() + this.timeoutMs;
     let statementId: string | undefined;
     let finished = false;
+    const started = Date.now();
+    const queryId = crypto.randomUUID();
+    const queryFingerprint = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sql))))
+      .map(byte => byte.toString(16).padStart(2, '0')).join('').slice(0, 24);
+    let stage = 'submit';
     try {
       let payload = await this.request('/api/2.0/sql/statements', {
         method: 'POST',
@@ -126,6 +135,7 @@ export class DatabricksClient implements QueryExecutor {
         }),
       }, deadline);
       for (;;) {
+        stage = 'decode';
         const parsed = execution.safeParse(payload);
         if (!parsed.success) throw new ApiError(502, 'invalid_query_response', 'Resposta inválida da fonte de dados.');
         const result = parsed.data;
@@ -148,19 +158,31 @@ export class DatabricksClient implements QueryExecutor {
         if (!['PENDING', 'RUNNING'].includes(state) || !statementId) {
           const failure = (payload as { status?: { error?: { error_code?: string; message?: string } } }).status?.error;
           const permissionDenied = failure?.message?.includes('[INSUFFICIENT_PERMISSIONS]');
-          console.warn(JSON.stringify({ code: 'databricks_sql_failed', upstreamCode: failure?.error_code, permissionDenied: !!permissionDenied }));
+          console.warn(JSON.stringify({ event: 'databricks_sql_failed', ...this.context, query_id: queryId,
+            query_fingerprint: queryFingerprint, code: 'databricks_sql_failed',
+            upstreamCode: typeof failure?.error_code === 'string' && /^[A-Z0-9_]{1,64}$/.test(failure.error_code) ? failure.error_code : 'unknown', permissionDenied: !!permissionDenied }));
           finished = true;
           if (permissionDenied) throw new ApiError(503, 'databricks_permission_missing', 'A identidade da API ainda não tem permissão para consultar uma tabela desta visão. Solicite a liberação ao administrador.');
           throw new ApiError(502, 'query_failed', 'Não foi possível executar a consulta do dashboard.');
         }
         if (Date.now() + this.pollMs >= deadline) throw new ApiError(504, 'query_timeout', 'A consulta excedeu o tempo permitido.');
         await new Promise((resolve) => setTimeout(resolve, this.pollMs));
+        stage = 'poll';
         payload = await this.request(`/api/2.0/sql/statements/${encodeURIComponent(statementId)}`, { method: 'GET' }, deadline);
       }
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'databricks_query_failed', ...this.context,
+        query_id: queryId, query_fingerprint: queryFingerprint, dependency: 'databricks', stage,
+        code: error instanceof ApiError ? error.code : 'databricks_unavailable',
+        duration_ms: Date.now() - started, timeout_ms: this.timeoutMs, ...diagnostic(error) }));
+      throw error;
     } finally {
       if (statementId && !finished) {
         await this.request(`/api/2.0/sql/statements/${encodeURIComponent(statementId)}/cancel`,
-          { method: 'POST' }, Date.now() + 2_000).catch(() => undefined);
+          { method: 'POST' }, Date.now() + 2_000).catch(error => {
+            console.warn(JSON.stringify({ event: 'databricks_cancel_failed', ...this.context, query_id: queryId,
+              query_fingerprint: queryFingerprint, stage: 'cancel', dependency: 'databricks', ...diagnostic(error) }));
+          });
       }
     }
   }
