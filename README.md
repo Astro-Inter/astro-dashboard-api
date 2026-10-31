@@ -57,7 +57,7 @@ O `health` não consulta dependências. Um `200` nele não confirma acesso ao Po
 
 ## Endpoints
 
-As configurações das visões pessoais ficam no `localStorage` do Astro Web, conforme o [guia de dashboards editáveis](docs/editable-dashboards.md). A API não armazena essas configurações nem exige uma tabela adicional; o PostgreSQL continua sendo usado para resolver o acesso ao workspace.
+As configurações das visões pessoais ficam na coleção Mongo `configuracoes_paineis`, conforme o [guia de dashboards editáveis](docs/editable-dashboards.md). Configure MONGODB_URI e MONGODB_DATABASE no servidor. O web importa as configurações locais antigas; o PostgreSQL continua resolvendo o acesso ao workspace.
 
 | Método | Rota | Autenticação | Resultado |
 | --- | --- | --- | --- |
