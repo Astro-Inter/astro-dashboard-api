@@ -1,3 +1,4 @@
+import { createViewStore, viewSchema, type ViewStore } from './dashboard/views';
 import { diagnostic } from "./diagnostics";
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -19,6 +20,7 @@ import { explorerQuerySchema, loadExplorer, publicExplorerCatalog } from './dash
 type WorkerEnv = { Bindings: Bindings; Variables: { requestId: string; workspace: WorkspaceContext } };
 
 export interface Dependencies {
+  viewStore: (env: Bindings) => ViewStore;
   verifyIdentity: typeof verifyFirebaseToken;
   resolveAccess: typeof resolveWorkspace;
   createExecutor: (env: Bindings, context?: { request_id: string }) => QueryExecutor;
@@ -26,7 +28,7 @@ export interface Dependencies {
 
 export function createApp(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
-    verifyIdentity: verifyFirebaseToken, resolveAccess: resolveWorkspace,
+    viewStore: createViewStore, verifyIdentity: verifyFirebaseToken, resolveAccess: resolveWorkspace,
     createExecutor: (env, context) => new DatabricksClient(settingsFor(env), undefined, undefined, undefined, undefined, context), ...overrides,
   };
   const app = new Hono<WorkerEnv>();
@@ -46,7 +48,7 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
   app.use('*', secureHeaders());
   app.use('/api/*', cors({
     origin: (origin, c) => allowedOrigins(c.env).includes(origin) ? origin : null,
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Authorization', 'Content-Type', 'X-Dashboard-Refresh'],
     exposeHeaders: ['X-Request-Id'],
     maxAge: 600,
@@ -64,6 +66,21 @@ export function createApp(overrides: Partial<Dependencies> = {}) {
   app.get('/api/me', (c) => {
     const { userId, workspaceId, role } = c.get('workspace');
     return c.json({ userId, workspaceId, role });
+  });
+  app.use('/api/views/*', bodyLimit({ maxSize: 131072, onError: () => { throw new ApiError(422, 'view_too_large', 'Reduza a configuração da visão.'); } }));
+  app.get('/api/views', async c => c.json({ items: await dependencies.viewStore(c.env).list(c.get('workspace')) }));
+  app.put('/api/views/:id', async c => {
+    const id = z.uuid().safeParse(c.req.param('id'));
+    const input = viewSchema.safeParse(await jsonBody(c.req));
+    if (!id.success || !input.success) throw new ApiError(422, 'invalid_view', 'Confira o nome, estilo, filtros e gráficos da visão.');
+    return c.json(await dependencies.viewStore(c.env).save(c.get('workspace'), id.data, input.data));
+  });
+  app.delete('/api/views/:id', async c => {
+    const id = z.uuid().safeParse(c.req.param('id'));
+    const version = z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER).safeParse(c.req.query('version'));
+    if (!id.success || !version.success) throw new ApiError(422, 'invalid_view', 'Informe a visão e sua versão.');
+    await dependencies.viewStore(c.env).remove(c.get('workspace'), id.data, version.data);
+    return c.body(null, 204);
   });
   app.get('/api/dashboard', async (c) => {
     const filters = parseFilters(new URL(c.req.url).searchParams);

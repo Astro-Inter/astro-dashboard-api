@@ -1,32 +1,23 @@
-# Visões editáveis no Astro Web
+# Configurações de painéis no MongoDB
 
-## Configurações no navegador
+Os dados analíticos continuam no Databricks. A API de dashboards persiste configurações na coleção `configuracoes_paineis`. Cada painel pertence ao usuário e workspace confirmados pelo Firebase e PostgreSQL; o cliente não escolhe esses identificadores. Painéis são pessoais dentro do workspace, como no armazenamento anterior.
 
-O Astro Web usa `localStorage` para salvar nome, filtros, ordem, tipo dos gráficos e receitas de cálculo. O armazenamento é separado por UID Firebase, usuário Astro e workspace. As configurações não sincronizam entre dispositivos, navegadores ou origens e são removidas quando os dados do site são apagados.
+Campos: `_id` (chave composta de workspace, usuário e UUID do painel), `painel_id` (UUID), `usuario_id` e `workspace_id` (strings de identificadores Astro), `nome`, `estilo`, `configuracao`, `versao`, `criado_em` e `atualizado_em` (datas BSON). A unicidade é garantida pelo índice `_id_`.
 
-A API não oferece CRUD de visões, não acessa uma tabela de configurações e não exige migração para esse recurso. A implementação anterior de persistência foi retirada do código. Essa retirada não executa DROP ou DELETE em uma tabela que já exista no banco.
+`configuracao` contém `filtros` (`inicio`, `fim`, `granularidade`) e `graficos` (`grafico_id`, `base_id`, `titulo`, `tipo`, `largura`, `consulta`). Receitas usam `base`, `agrupamento`, `serie`, `metrica`, `campo`, `operacao`, `formula`, `operador`, `operando`, `condicoes`, `valor`. Valores do catálogo permanecem identificadores técnicos; nomes de campos físicos são portugueses.
 
-## Dados e autorização
+`estilo` aceita overview, trends, bars, donut, area, progress, comparison, scatter, activity e metrics. O contrato HTTP mantém nomes ingleses compatíveis com o web: `name`, `config.artwork`, `config.filters`, `config.widgets`.
 
-Os dados analíticos continuam no Databricks. A API valida o token Firebase e consulta o vínculo atual no PostgreSQL Astro antes de consultar ou devolver resultados em cache. Configurações alteradas no navegador não concedem acesso a outro workspace; o servidor valida campos, operações e filtros e aplica o recorte autorizado.
+- `GET /api/views`: lista painéis do usuário no workspace atual, ordenados pela última alteração.
+- `PUT /api/views/{id}`: recebe `name`, `config`, `version`. UUID gerado pelo web. Versão zero cria; versão atual edita atomicamente e incrementa. UUID existente ou versão desatualizada retorna 409.
+- `DELETE /api/views/{id}?version=N`: exclui somente no escopo atual e com a versão atual; conflito retorna 409, sucesso 204.
 
-- `GET /api/me`: confirmar identidade e workspace.
-- `GET /api/dashboard`: indicadores prontos e filtros de período.
-- `GET /api/dashboard-catalog`: catálogo dos indicadores prontos.
-- `GET /api/explorer/catalog`: bases e campos autorizados com descrições acessíveis.
-- `POST /api/explorer/query`: calcular um gráfico com uma receita permitida.
+Corpos limitados a 128 KiB; até 12 gráficos, UUIDs distintos, nomes de até 120 caracteres, catálogo e receitas validados, datas reais e intervalo de até 366 dias. SQL livre e identificação de proprietário no corpo são recusados. Todas as rotas exigem autenticação e autorização atuais.
 
-O editor não aceita SQL livre nem joins arbitrários. A API monta as consultas e executa as agregações no Databricks. Cálculos, agrupamentos e cache estão descritos em [Catálogo de cálculos e cache](catalogo-e-cache.md).
+## Migração e publicação
 
-## Desenvolvimento e publicação
+Configurar os secrets `MONGODB_URI` e `MONGODB_DATABASE` no Worker antes de publicar API e web. A coleção nasce na primeira gravação; nenhuma consulta analítica é persistida. CORS permite GET, POST, PUT, DELETE e OPTIONS.
 
-No Astro Web:
+O web importa as visões antigas do localStorage, decodificando os marcadores de estilo dos títulos. Mantém os dados locais como cópia, marca a importação após sucesso e não escreve novos marcadores. IDs estáveis tornam tentativas repetidas seguras; um painel já existente no servidor prevalece. A importação é por navegador e conta/workspace; não é possível recuperar configurações de outro navegador sem abri-lo. Falhas não marcam a importação como concluída.
 
-```dotenv
-VITE_DASHBOARD_API_URL=https://astro-dashboard-api.app-4str0.workers.dev
-VITE_DASHBOARD_API_PROXY_URL=http://127.0.0.1:8787
-```
-
-A segunda variável configura apenas o proxy Vite para a API local. Em produção, o frontend usa `VITE_DASHBOARD_API_URL` diretamente. Publique a versão da API com os catálogos e cálculos e configure `CORS_ALLOWED_ORIGINS` com a origem exata do web. São permitidos GET, POST e OPTIONS, com `Authorization`, `Content-Type` e `X-Dashboard-Refresh`.
-
-Credenciais Databricks e a conexão PostgreSQL permanecem no servidor. O serviço de dashboards não grava tokens ou resultados analíticos no `localStorage`; somente configurações são persistidas pelo frontend.
+Atualização por foco da janela e após alterações; conflitos entre dispositivos exigem recarregar a visão. Não há atualização em tempo real por websocket.

@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export interface Bindings {
   ASTRO_DB: Hyperdrive;
+  MONGODB_URI?: string;
+  MONGODB_DATABASE?: string;
   CORS_ALLOWED_ORIGINS?: string;
   FIREBASE_PROJECT_ID?: string;
   DATABRICKS_HOST?: string;

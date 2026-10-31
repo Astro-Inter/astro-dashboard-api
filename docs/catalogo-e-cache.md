@@ -4,7 +4,7 @@
 
 - `GET /api/explorer/catalog`: bases autorizadas, campos, rótulos, descrições, utilidade, tipo lógico e operações compatíveis. As expressões SQL não são enviadas ao navegador.
 - `POST /api/explorer/query`: recebe `{ query, filters }` e devolve um gráfico agregado do workspace autenticado.
-- O frontend pode persistir `query` em um widget com `datasetId: "custom"` no seu `localStorage`, separado por conta e workspace. A API recebe a receita somente quando precisa calcular o gráfico; não há tabela nem rotas de persistência de visões.
+- O frontend persiste `query` em um widget com `datasetId: "custom"` pela API /api/views, na coleção Mongo configuracoes_paineis, separada por usuário e workspace. As receitas são validadas tanto ao salvar como ao calcular; os resultados continuam no Databricks.
 
 Exemplo: pessoas diferentes por perfil.
 
